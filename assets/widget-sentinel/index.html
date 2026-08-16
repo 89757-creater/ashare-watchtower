@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>588170 持仓风控哨兵</title>
+<style>
+  :root {
+    --daimon-widget-host-safe-inline-end: 82px;
+    --daimon-widget-host-safe-block-start: 44px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: transparent;
+    color: var(--kimi-color-text-primary);
+    font-family: var(--kimi-font-sans);
+    letter-spacing: 0;
+  }
+  [data-kimi-root] { inline-size: 100%; min-inline-size: 0; max-inline-size: 100%; overflow: visible; }
+  [data-kimi-root] * { min-inline-size: 0; }
+  .kimi-host-safe-context { container-type: inline-size; }
+  .kimi-host-safe-header {
+    box-sizing: border-box;
+    min-block-size: var(--kimi-host-safe-block, 0px);
+    padding-inline-end: var(--daimon-widget-host-safe-inline-end, 82px);
+  }
+  @container (max-width: 419px) {
+    .kimi-host-safe-header {
+      min-block-size: 0;
+      padding-block-start: var(--daimon-widget-host-safe-block-start, 44px);
+      padding-inline-end: 0;
+    }
+  }
+  html[data-daimon-size-tier="compact"] [data-kimi-priority="p1"],
+  html[data-daimon-size-tier="compact"] [data-kimi-priority="p2"],
+  html[data-daimon-size-tier="compact"] [data-kimi-priority="p3"] { display: none !important; }
+
+  main { padding: 4px 14px 12px 14px; }
+
+  /* header */
+  .title-row { display: flex; align-items: baseline; gap: 8px; }
+  h1 { font-size: 13px; font-weight: 600; color: var(--kimi-color-text-secondary); }
+  .status-dot {
+    inline-size: 7px; block-size: 7px; border-radius: 50%;
+    background: var(--kimi-color-positive); flex: none; align-self: center;
+  }
+  .status-dot.running { background: var(--kimi-color-warning); }
+  .status-dot.error { background: var(--kimi-color-danger); }
+
+  /* P0 */
+  .p0 { margin-top: 6px; }
+  .pnl-value {
+    display: block;
+    font-size: 34px; font-weight: 650; line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+  }
+  .pnl-value .pct { font-size: 18px; font-weight: 600; margin-inline-start: 8px; }
+  .pnl-state { font-size: 12px; font-weight: 600; margin-inline-start: 6px; }
+  .loss { color: var(--kimi-color-danger); }
+  .profit { color: var(--kimi-color-positive); }
+  .flat { color: var(--kimi-color-text-secondary); }
+  .p0-label { font-size: 12px; color: var(--kimi-color-text-tertiary); margin-top: 2px; }
+
+  /* alert banner */
+  .alert-band {
+    margin-top: 10px; padding: 7px 10px; border-radius: 8px;
+    font-size: 12.5px; font-weight: 600; line-height: 1.4;
+    border-inline-start: 3px solid transparent;
+  }
+  .alert-band.none {
+    color: var(--kimi-color-text-secondary);
+    background: var(--kimi-color-surface-muted);
+    border-inline-start-color: var(--kimi-color-border);
+  }
+  .alert-band.warn {
+    color: var(--kimi-color-warning);
+    background: color-mix(in srgb, var(--kimi-color-warning) 10%, transparent);
+    border-inline-start-color: var(--kimi-color-warning);
+  }
+  .alert-band.triggered {
+    color: var(--kimi-color-danger);
+    background: color-mix(in srgb, var(--kimi-color-danger) 10%, transparent);
+    border-inline-start-color: var(--kimi-color-danger);
+  }
+  .alert-band.target {
+    color: var(--kimi-color-positive);
+    background: color-mix(in srgb, var(--kimi-color-positive) 10%, transparent);
+    border-inline-start-color: var(--kimi-color-positive);
+  }
+
+  /* threshold ruler */
+  .ruler-wrap { margin-top: 12px; }
+  .ruler-wrap svg { display: block; inline-size: 100%; block-size: auto; overflow: visible; }
+  .r-title { font-size: 11.5px; color: var(--kimi-color-text-tertiary); margin-bottom: 2px; }
+
+  /* facts */
+  .facts {
+    margin-top: 12px;
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px 6px;
+  }
+  .fact dt { font-size: 11px; color: var(--kimi-color-text-quaternary); }
+  .fact dd {
+    font-size: 14px; font-weight: 600; margin-top: 1px;
+    font-variant-numeric: tabular-nums;
+  }
+  .facts { border-block-start: 1px solid var(--kimi-color-border); padding-block-start: 10px; }
+
+  .note-line {
+    margin-top: 10px; font-size: 11.5px; line-height: 1.5;
+    color: var(--kimi-color-text-tertiary);
+  }
+  .meta {
+    margin-top: 8px; font-size: 10.5px;
+    color: var(--kimi-color-text-quaternary);
+    display: flex; justify-content: space-between; gap: 8px;
+  }
+
+  @media (max-width: 339px) {
+    .pnl-value { font-size: 28px; }
+    .facts { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (min-width: 760px) {
+    .pnl-value { font-size: 40px; }
+    main { padding-inline: 22px; }
+  }
+</style>
+</head>
+<body>
+<main class="kimi-host-safe-context" data-kimi-root>
+  <header class="kimi-host-safe-header">
+    <div class="title-row">
+      <span class="status-dot" id="statusDot" aria-hidden="true"></span>
+      <h1>588170 科创半导体ETF · 持仓风控哨兵</h1>
+    </div>
+  </header>
+
+  <section class="p0" data-kimi-priority="p0" aria-label="浮动盈亏">
+    <output class="pnl-value" id="pnlValue">
+      <span id="pnlAbs">-65.80</span><span class="pct" id="pnlPct">-10.4%</span>
+      <span class="pnl-state" id="pnlState">浮亏</span>
+    </output>
+    <p class="p0-label" id="p0Label">600 份 · 成本 1.059 · 浮动盈亏（元）</p>
+  </section>
+
+  <div class="alert-band none" id="alertBand" data-kimi-priority="p1" role="status">监控中：未触及止损 / 止盈线</div>
+
+  <section class="ruler-wrap" data-kimi-priority="p1" aria-label="阈值标尺">
+    <p class="r-title">阈值标尺 · 现价位置</p>
+    <svg id="ruler" viewBox="0 0 400 96" role="img" aria-label="价格阈值标尺"></svg>
+  </section>
+
+  <dl class="facts" data-kimi-priority="p2">
+    <div class="fact"><dt>现价</dt><dd id="fPrice">0.949</dd></div>
+    <div class="fact"><dt>今日涨跌</dt><dd id="fChg">+9.71%</dd></div>
+    <div class="fact"><dt>持仓市值</dt><dd id="fMv">569.40</dd></div>
+    <div class="fact"><dt>今日区间</dt><dd id="fRange">0.864~0.966</dd></div>
+    <div class="fact"><dt>涨停价</dt><dd id="fLimitUp">1.038</dd></div>
+    <div class="fact"><dt>跌停价</dt><dd id="fLimitDown">0.692</dd></div>
+  </dl>
+
+  <p class="note-line" id="noteLine" data-kimi-priority="p2">反弹至 1.05 附近为减仓窗口；跌破 0.85 执行止损。</p>
+
+  <footer class="meta" data-kimi-priority="p3">
+    <span id="metaTime">示例数据 · 等待首次运行</span>
+    <span>行情源：腾讯行情</span>
+  </footer>
+</main>
+
+<script>
+(function () {
+  var STOP = 0.85, TARGET = 1.05, COST = 1.059;
+  var SAMPLE = {
+    price: 0.949, change_pct: 9.71, date: "2026-08-05", time: "15:00",
+    shares: 600, cost: COST, market_value: 569.40,
+    float_pnl: -65.80, float_pnl_pct: -10.35,
+    day_high: 0.966, day_low: 0.864,
+    stop_loss: STOP, take_profit: TARGET, alert: "none",
+    limit_up: 1.038, limit_down: 0.692, limit_state: "none", limit_time: "",
+    note: "反弹至 1.05 附近为减仓窗口；跌破 0.85 执行止损。"
+  };
+  var sampleMode = true;
+
+  function token(name, fallback) {
+    try {
+      if (window.DaimonWidget && window.DaimonWidget.getToken) {
+        var v = window.DaimonWidget.getToken(name);
+        if (v) return v;
+      }
+    } catch (e) {}
+    return fallback;
+  }
+
+  function fmt(n, d) { return Number(n).toFixed(d === undefined ? 3 : d); }
+  function sign(n) { return n > 0 ? "+" : ""; }
+
+  function alertInfo(d) {
+    if (d.limit_state === "hit_up") {
+      return { cls: "target", text: "今日 " + (d.limit_time || "--") + " 触及涨停价 " + fmt(d.limit_up) };
+    }
+    if (d.limit_state === "hit_down") {
+      return { cls: "triggered", text: "今日 " + (d.limit_time || "--") + " 触及跌停价 " + fmt(d.limit_down) };
+    }
+    switch (d.alert) {
+      case "stop_loss": return { cls: "triggered", text: "已跌破止损线 0.85 —— 按纪律执行止损" };
+      case "take_profit": return { cls: "target", text: "已触及止盈区 1.05 —— 成本区减仓窗口打开" };
+      case "near_stop": return { cls: "warn", text: "逼近止损线 0.85，注意风险" };
+      case "near_target": return { cls: "warn", text: "逼近止盈区 1.05，准备减仓" };
+      default: return { cls: "none", text: "监控中：未触及涨跌停与止损 / 止盈线" };
+    }
+  }
+
+  function drawRuler(d) {
+    var svg = document.getElementById("ruler");
+    var W = 400, H = 96, L = 10, R = 390, Y = 58;
+    var min = 0.80, max = 1.10;
+    function x(v) { return L + (Math.min(max, Math.max(min, v)) - min) / (max - min) * (R - L); }
+
+    var cText3 = token("--kimi-color-text-tertiary", "#8a8a8a");
+    var cText4 = token("--kimi-color-text-quaternary", "#a8a8a8");
+    var cBorder = token("--kimi-color-border", "#d8d8d8");
+    var cDanger = token("--kimi-color-danger", "#d64545");
+    var cPositive = token("--kimi-color-positive", "#2e9e5b");
+    var cAccent = token("--kimi-color-accent", "#3b6fe0");
+    var cText1 = token("--kimi-color-text-primary", "#1a1a1a");
+
+    var s = "";
+    // zone bands: below stop (danger), above target (positive)
+    s += '<rect x="' + x(min) + '" y="' + (Y - 7) + '" width="' + (x(STOP) - x(min)) + '" height="14" fill="' + cDanger + '" opacity="0.10"/>';
+    s += '<rect x="' + x(TARGET) + '" y="' + (Y - 7) + '" width="' + (x(max) - x(TARGET)) + '" height="14" fill="' + cPositive + '" opacity="0.10"/>';
+    // axis
+    s += '<line x1="' + L + '" y1="' + Y + '" x2="' + R + '" y2="' + Y + '" stroke="' + cBorder + '" stroke-width="1.5"/>';
+    // ticks
+    [0.80, 0.90, 1.00, 1.10].forEach(function (t) {
+      s += '<line x1="' + x(t) + '" y1="' + (Y - 4) + '" x2="' + x(t) + '" y2="' + (Y + 4) + '" stroke="' + cBorder + '" stroke-width="1"/>';
+      s += '<text x="' + x(t) + '" y="' + (Y + 18) + '" font-size="9" fill="' + cText4 + '" text-anchor="middle">' + t.toFixed(2) + '</text>';
+    });
+    // stop line
+    s += '<line x1="' + x(STOP) + '" y1="' + (Y - 16) + '" x2="' + x(STOP) + '" y2="' + (Y + 8) + '" stroke="' + cDanger + '" stroke-width="1.6"/>';
+    s += '<text x="' + x(STOP) + '" y="' + (Y - 22) + '" font-size="9.5" font-weight="600" fill="' + cDanger + '" text-anchor="middle">止损 0.85</text>';
+    // target line
+    s += '<line x1="' + x(TARGET) + '" y1="' + (Y - 16) + '" x2="' + x(TARGET) + '" y2="' + (Y + 8) + '" stroke="' + cPositive + '" stroke-width="1.6"/>';
+    s += '<text x="' + x(TARGET) + '" y="' + (Y - 22) + '" font-size="9.5" font-weight="600" fill="' + cPositive + '" text-anchor="middle">止盈 1.05</text>';
+    // cost dashed line
+    s += '<line x1="' + x(COST) + '" y1="' + (Y - 10) + '" x2="' + x(COST) + '" y2="' + (Y + 6) + '" stroke="' + cText3 + '" stroke-width="1.2" stroke-dasharray="3 3"/>';
+    s += '<text x="' + x(COST) + '" y="' + (Y + 30) + '" font-size="9" fill="' + cText3 + '" text-anchor="middle">成本 1.059</text>';
+    // price pointer
+    var px = x(d.price);
+    s += '<polygon points="' + px + ',' + (Y - 30) + ' ' + (px - 5) + ',' + (Y - 38) + ' ' + (px + 5) + ',' + (Y - 38) + '" fill="' + cAccent + '"/>';
+    s += '<line x1="' + px + '" y1="' + (Y - 30) + '" x2="' + px + '" y2="' + (Y + 6) + '" stroke="' + cAccent + '" stroke-width="1.6"/>';
+    var anchor = px < 40 ? "start" : (px > 360 ? "end" : "middle");
+    s += '<text x="' + px + '" y="' + (Y - 44) + '" font-size="11.5" font-weight="700" fill="' + cAccent + '" text-anchor="' + anchor + '">' + fmt(d.price) + '</text>';
+
+    svg.innerHTML = s;
+  }
+
+  function render(data) {
+    var d = (data && data.main && data.main.price) ? data.main : SAMPLE;
+    sampleMode = !(data && data.main && data.main.price);
+
+    var pnl = Number(d.float_pnl), pct = Number(d.float_pnl_pct);
+    var cls = pnl > 0 ? "profit" : (pnl < 0 ? "loss" : "flat");
+    var v = document.getElementById("pnlValue");
+    v.className = "pnl-value " + cls;
+    document.getElementById("pnlAbs").textContent = sign(pnl) + pnl.toFixed(2);
+    document.getElementById("pnlPct").textContent = sign(pct) + pct.toFixed(1) + "%";
+    document.getElementById("pnlState").textContent = pnl > 0 ? "浮盈" : (pnl < 0 ? "浮亏" : "持平");
+    document.getElementById("p0Label").textContent = d.shares + " 份 · 成本 " + fmt(d.cost) + " · 浮动盈亏（元）";
+
+    var a = alertInfo(d);
+    var band = document.getElementById("alertBand");
+    band.className = "alert-band " + a.cls;
+    band.textContent = a.text;
+
+    document.getElementById("fPrice").textContent = fmt(d.price);
+    var chg = document.getElementById("fChg");
+    chg.textContent = sign(Number(d.change_pct)) + Number(d.change_pct).toFixed(2) + "%";
+    chg.style.color = d.change_pct > 0 ? token("--kimi-color-positive", "#2e9e5b")
+      : (d.change_pct < 0 ? token("--kimi-color-danger", "#d64545") : "");
+    document.getElementById("fMv").textContent = Number(d.market_value).toFixed(2);
+    document.getElementById("fRange").textContent = fmt(d.day_low) + "~" + fmt(d.day_high);
+    var lu = document.getElementById("fLimitUp");
+    lu.textContent = fmt(d.limit_up);
+    lu.style.color = d.limit_state === "hit_up" ? token("--kimi-color-positive", "#2e9e5b") : "";
+    var ld = document.getElementById("fLimitDown");
+    ld.textContent = fmt(d.limit_down);
+    ld.style.color = d.limit_state === "hit_down" ? token("--kimi-color-danger", "#d64545") : "";
+    if (d.note) document.getElementById("noteLine").textContent = d.note;
+
+    document.getElementById("metaTime").textContent =
+      (sampleMode ? "示例数据 · 等待首次运行" : "更新于 " + d.date + " " + d.time);
+
+    drawRuler(d);
+  }
+
+  function renderStatus() {
+    var dot = document.getElementById("statusDot");
+    var st = window.DaimonWidget && window.DaimonWidget.status;
+    dot.className = "status-dot" + (st === "running" ? " running" : (st === "error" ? " error" : ""));
+  }
+
+  if (window.DaimonWidget && window.DaimonWidget.onDataChange) {
+    window.DaimonWidget.onDataChange(render);
+    if (window.DaimonWidget.onStatusChange) window.DaimonWidget.onStatusChange(renderStatus);
+    if (window.DaimonWidget.onThemeChange) window.DaimonWidget.onThemeChange(function () {
+      render(window.DaimonWidget.data);
+    });
+    renderStatus();
+  } else {
+    render(null);
+  }
+})();
+</script>
+</body>
+</html>

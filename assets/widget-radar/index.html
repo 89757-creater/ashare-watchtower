@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>舆情雷达 · 新闻冲击研判</title>
+<style>
+  :root {
+    --daimon-widget-host-safe-inline-end: 190px;
+    --daimon-widget-host-safe-block-start: 44px;
+  }
+  .kimi-host-safe-context { container-type: inline-size; }
+  .kimi-host-safe-header {
+    box-sizing: border-box;
+    min-block-size: var(--daimon-widget-host-safe-block-start, 44px);
+    padding-inline-end: var(--daimon-widget-host-safe-inline-end, 190px);
+  }
+  @container (max-width: 419px) {
+    .kimi-host-safe-header {
+      min-block-size: 0;
+      padding-block-start: var(--daimon-widget-host-safe-block-start, 44px);
+      padding-inline-end: 0;
+    }
+  }
+  [data-kimi-root] { box-sizing: border-box; inline-size: 100%; min-inline-size: 0; max-inline-size: 100%; overflow: visible; }
+  [data-kimi-root] * { box-sizing: border-box; min-inline-size: 0; }
+  html[data-daimon-size-tier="compact"] [data-kimi-priority="p1"],
+  html[data-daimon-size-tier="compact"] [data-kimi-priority="p2"],
+  html[data-daimon-size-tier="compact"] [data-kimi-priority="p3"] { display: none !important; }
+
+  html, body { margin: 0; padding: 0; background: transparent; }
+  .widget {
+    font-family: var(--kimi-font-sans);
+    color: var(--kimi-color-text-primary);
+    padding: 4px 14px 10px 14px;
+    letter-spacing: 0;
+  }
+  .bull { color: #d43c33; }   /* 利多=红 */
+  .bear { color: #15924e; }   /* 利空=绿 */
+  .neut { color: var(--kimi-color-text-tertiary); }
+
+  header h1 { margin: 0; font-size: 14.5px; font-weight: 500; display: inline; }
+  .asof { margin-left: 8px; font-size: 11.5px; color: var(--kimi-color-text-tertiary); font-variant-numeric: tabular-nums; }
+
+  .p0 { margin: 6px 0 2px; display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; }
+  .p0 .lead { font-size: 12.5px; color: var(--kimi-color-text-secondary); }
+  .p0 output {
+    display: inline-block;
+    font-size: 24px; font-weight: 500; line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+  }
+  .pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; padding: 2px 7px; border-radius: 999px;
+    border: 1px solid var(--kimi-color-border);
+    color: var(--kimi-color-text-secondary); white-space: nowrap;
+  }
+  .pill.bull { color: #d43c33; border-color: #d43c33; }
+  .pill.bear { color: #15924e; border-color: #15924e; }
+  .pill.hold { color: var(--kimi-color-accent); border-color: var(--kimi-color-accent); }
+
+  .overview {
+    margin: 6px 0 4px; font-size: 12.5px; line-height: 1.55;
+    color: var(--kimi-color-text-secondary);
+  }
+
+  .feed { margin-top: 6px; }
+  .ev {
+    padding: 8px 0;
+    border-top: 1px solid var(--kimi-color-border);
+  }
+  .ev-line1 { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+  .ev-title { font-size: 13px; font-weight: 500; line-height: 1.35; }
+  .ev-meta { font-size: 10.5px; color: var(--kimi-color-text-quaternary); font-variant-numeric: tabular-nums; }
+  .ev-sum { margin: 3px 0 0; font-size: 12px; line-height: 1.5; color: var(--kimi-color-text-secondary); }
+  .ev-logic { margin: 3px 0 0; font-size: 12px; line-height: 1.5; }
+  .ev-logic .k { color: var(--kimi-color-text-tertiary); }
+  .chips { margin-top: 5px; display: flex; flex-wrap: wrap; gap: 4px; }
+  .chip {
+    font-size: 10.5px; padding: 1px 6px; border-radius: 4px;
+    background: var(--kimi-color-surface-muted);
+    color: var(--kimi-color-text-secondary);
+    font-variant-numeric: tabular-nums;
+  }
+  .chip.bull { color: #d43c33; }
+  .chip.bear { color: #15924e; }
+  .chip.hold { color: var(--kimi-color-accent); font-weight: 500; }
+  .impact-dots { font-size: 10px; letter-spacing: 1px; }
+  .impact-dots.hi { color: #d43c33; }
+  .impact-dots.mid { color: var(--kimi-color-text-secondary); }
+  .impact-dots.lo { color: var(--kimi-color-text-quaternary); }
+
+  .more-note { margin: 6px 0 0; font-size: 11px; color: var(--kimi-color-text-tertiary); }
+  footer {
+    margin-top: 8px; padding-top: 6px;
+    border-top: 1px solid var(--kimi-color-border);
+    font-size: 10.5px; color: var(--kimi-color-text-quaternary); line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+<main class="widget kimi-host-safe-context" data-kimi-root>
+  <header class="kimi-host-safe-header" data-kimi-priority="p0">
+    <h1>舆情雷达</h1><span class="asof" data-f="asof">—</span>
+    <p class="p0" aria-label="舆情倾向与最高冲击事件">
+      <span class="lead">舆情倾向</span>
+      <output data-f="sentiment" aria-label="舆情倾向">—</output>
+      <span class="pill" data-f="topev">—</span>
+      <span class="pill hold" data-f="holdflag" style="display:none">★ 涉及持仓</span>
+    </p>
+  </header>
+
+  <p class="overview" data-kimi-priority="p1" data-f="overview"></p>
+  <section class="feed" data-kimi-priority="p1" aria-label="事件研判列表" data-feed></section>
+  <p class="more-note" data-kimi-priority="p1" data-f="more"></p>
+
+  <footer data-kimi-priority="p3">
+    口径：基于公开新闻的事件驱动研判，利多=红、利空=绿；● 数量为影响级别。
+    事件影响为概率性预判，不构成投资建议。
+  </footer>
+</main>
+
+<script>
+(function () {
+  // 说明性示例（非实时数据），首次分析运行后会被替换
+  var SAMPLE = {
+    as_of: "示例 · 等待首次分析",
+    sentiment: "中性",
+    overview: "首次分析运行后，这里会给出当前舆情对 A 股的整体倾向与核心逻辑。",
+    events: [
+      {
+        title: "示例：某行业政策发布会召开",
+        summary: "示例摘要：政策细节与市场对标。",
+        source: "示例来源", time: "--:--", heat: 4,
+        direction: "利多", impact: "高",
+        sectors: ["半导体"],
+        etfs: [{ code: "588170", name: "科创半导体ETF", direction: "利多", holding: true }],
+        holding_relevant: true,
+        logic: "示例逻辑：政策 → 板块盈利预期 → ETF 净值传导路径。"
+      }
+    ],
+    note: ""
+  };
+
+  function dirCls(d) { return d === "利多" ? "bull" : d === "利空" ? "bear" : "neut"; }
+  function dots(impact) {
+    var n = impact === "高" ? 3 : impact === "中" ? 2 : 1;
+    var c = impact === "高" ? "hi" : impact === "中" ? "mid" : "lo";
+    return '<span class="impact-dots ' + c + '" aria-label="影响级别 ' + impact + '">' +
+           "●".repeat(n) + '<span style="opacity:.25">' + "●".repeat(3 - n) + "</span></span>";
+  }
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"]/g, function (ch) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch];
+    });
+  }
+
+  function render(data) {
+    var main = (data && data.main) || SAMPLE;
+    var events = (main.events || []).slice();
+    document.querySelector('[data-f="sentiment"]').textContent = main.sentiment || "—";
+    document.querySelector('[data-f="sentiment"]').className =
+      main.sentiment === "偏多" ? "bull" : main.sentiment === "偏空" ? "bear" : "";
+    document.querySelector('[data-f="asof"]').textContent = main.as_of || "—";
+
+    // P0：最高冲击事件
+    var hi = events.filter(function (e) { return e.impact === "高"; })[0] || events[0];
+    var topPill = document.querySelector('[data-f="topev"]');
+    if (hi) {
+      topPill.textContent = "最高冲击：" + (hi.title.length > 16 ? hi.title.slice(0, 16) + "…" : hi.title);
+      topPill.className = "pill " + dirCls(hi.direction);
+    } else {
+      topPill.textContent = "暂无高冲击事件";
+      topPill.className = "pill";
+    }
+    var anyHold = events.some(function (e) { return e.holding_relevant; });
+    document.querySelector('[data-f="holdflag"]').style.display = anyHold ? "" : "none";
+
+    document.querySelector('[data-f="overview"]').textContent = main.overview || "";
+
+    var expanded = document.documentElement.getAttribute("data-daimon-size-tier") === "expanded";
+    var topN = expanded ? 8 : 3;
+    var feed = document.querySelector("[data-feed]");
+    feed.innerHTML = "";
+
+    events.slice(0, topN).forEach(function (e) {
+      var d = document.createElement("article");
+      d.className = "ev";
+      var chips = "";
+      (e.etfs || []).forEach(function (t) {
+        chips += '<span class="chip ' + dirCls(t.direction) + (t.holding ? " hold" : "") + '">' +
+                 esc(t.name) + (t.holding ? " ★" : "") + "</span>";
+      });
+      (e.sectors || []).slice(0, 3).forEach(function (s) {
+        chips += '<span class="chip">' + esc(s) + "</span>";
+      });
+      d.innerHTML =
+        '<div class="ev-line1">' + dots(e.impact) +
+          '<span class="pill ' + dirCls(e.direction) + '">' + esc(e.direction) + "</span>" +
+          '<span class="ev-title">' + esc(e.title) + "</span>" +
+          '<span class="ev-meta">' + esc(e.time || "") + " · " + esc(e.source || "") + "</span>" +
+        "</div>" +
+        (e.summary ? '<p class="ev-sum">' + esc(e.summary) + "</p>" : "") +
+        (e.logic ? '<p class="ev-logic"><span class="k">传导逻辑：</span>' + esc(e.logic) + "</p>" : "") +
+        (chips ? '<div class="chips">' + chips + "</div>" : "");
+      feed.appendChild(d);
+    });
+
+    var more = document.querySelector('[data-f="more"]');
+    more.textContent = (!expanded && events.length > topN)
+      ? "还有 " + (events.length - topN) + " 条 · 放大查看全部研判"
+      : "";
+  }
+
+  if (window.DaimonWidget && window.DaimonWidget.onDataChange) {
+    window.DaimonWidget.onDataChange(render);
+  } else {
+    render(null);
+  }
+})();
+</script>
+</body>
+</html>
