@@ -86,6 +86,50 @@
   .tag.hot { color: #d43c33; border-color: #d43c33; }
   .tag.weak { color: var(--kimi-color-text-tertiary); }
 
+  /* 波段信号 pill（蓝=低吸，橙=高抛，灰=其他） */
+  .sig {
+    display: inline-flex;
+    align-items: center;
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    border: 1px solid var(--kimi-color-border);
+    color: var(--kimi-color-text-tertiary);
+    white-space: nowrap;
+  }
+  .sig.buy { color: var(--kimi-color-accent); border-color: var(--kimi-color-accent); }
+  .sig.sell { color: var(--kimi-color-warning); border-color: var(--kimi-color-warning); }
+
+  /* 低吸潜力条 */
+  .picks {
+    margin: 8px 0 2px;
+    padding: 7px 9px;
+    border-radius: 8px;
+    background: var(--kimi-color-surface-muted);
+    border-inline-start: 3px solid var(--kimi-color-accent);
+  }
+  .picks .pk-title {
+    font-size: 11.5px;
+    color: var(--kimi-color-text-tertiary);
+    margin-bottom: 4px;
+  }
+  .pick {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .pick .pn { font-weight: 600; }
+  .pick .pr { color: var(--kimi-color-text-tertiary); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .pick.holding .pn::after {
+    content: "★";
+    margin-left: 4px;
+    font-size: 10px;
+    color: var(--kimi-color-accent);
+  }
+
   /* 市场状态条 */
   .market {
     display: flex;
@@ -105,7 +149,7 @@
   .table { margin-top: 6px; }
   .trow {
     display: grid;
-    grid-template-columns: 20px minmax(0, 1.35fr) minmax(0, 1.6fr) 46px;
+    grid-template-columns: 20px minmax(0, 1.35fr) minmax(0, 1.6fr) 52px;
     align-items: center;
     gap: 8px;
     padding: 5px 0;
@@ -172,13 +216,13 @@
     font-weight: 500;
     font-size: 12.5px;
   }
-  .tagcell { text-align: right; }
+  .tagcell { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
   .tagcell .tag { padding: 1px 6px; }
 
   /* 宽版增列 */
   .col-wide { display: none; }
   @media (min-width: 620px) {
-    .trow { grid-template-columns: 22px minmax(0, 1.2fr) 70px minmax(0, 1.5fr) 52px 44px 64px; }
+    .trow { grid-template-columns: 22px minmax(0, 1.2fr) 70px minmax(0, 1.5fr) 52px 44px 44px 64px; }
     .col-wide { display: block; }
   }
   .num { font-variant-numeric: tabular-nums; text-align: right; font-size: 12px; }
@@ -215,6 +259,11 @@
     </p>
   </header>
 
+  <section class="picks" data-kimi-priority="p1" aria-label="低吸潜力" data-picks hidden>
+    <p class="pk-title">低买高卖 · 低吸潜力（20日区间低位）</p>
+    <div data-pick-rows></div>
+  </section>
+
   <section class="market" data-kimi-priority="p1" aria-label="大盘状态" data-market></section>
 
   <section class="table" data-kimi-priority="p1" aria-label="动量排名">
@@ -224,7 +273,8 @@
       <span>近5日动量</span>
       <span class="num col-wide">近20日</span>
       <span class="num col-wide">量能</span>
-      <span class="tagcell">节奏</span>
+      <span class="num col-wide">区间位</span>
+      <span class="tagcell">节奏 / 波段信号</span>
     </div>
     <div data-rows></div>
     <div data-rows2></div>
@@ -233,43 +283,33 @@
 
   <footer data-kimi-priority="p3">
     口径：近5日/20日为收盘价区间涨跌幅；量能=近5日日均成交量÷前20日均量；动量条以0轴为基线，红涨绿跌。
-    数据源：腾讯行情（每日收盘后自动刷新）。动量不代表未来收益，不构成投资建议。
+    波段信号=现价在20日区间的位置×动量方向：≤30%为低位（蓝=低吸窗口），≥75%为高位（橙=高抛窗口）；参考低吸/高抛价=20日最低/最高收盘。
+    数据源：腾讯行情（每日收盘后自动刷新）。信号为规则初判，不代表未来收益，不构成投资建议。
   </footer>
 </main>
 
 <script>
 (function () {
-  // 真实样本（2026-08-12 收盘计算），首次运行前展示
+  // 真实样本（2026-08-17 收盘计算），首次运行前展示
   var SAMPLE = {
-    as_of: "2026-08-12 收盘",
+    as_of: "2026-08-17 收盘",
     note: "",
     market: [
-      { code: "sh000001", name: "上证指数", close: 3946.68, pct: 0.32, ret5: 3.25, ret20: null },
+      { code: "sh000001", name: "上证指数", close: 3973.04, pct: 1.17, ret5: 0.16, ret20: 4.66 },
       { code: "sz399001", name: "深证成指", close: 14339.0, pct: 0.56, ret5: 3.27, ret20: null },
       { code: "sz399006", name: "创业板指", close: 3583.0, pct: 0.96, ret5: 2.71, ret20: null }
     ],
+    picks: [
+      { code: "512000", name: "券商ETF", close: 0.52, pos20: 5.0, signal: "低位磨底", low20: 0.519, high20: 0.539, holding: false, reason: "20日区间位置 5%，尚未企稳；参考低吸 0.519 / 高抛 0.539" },
+      { code: "512880", name: "证券ETF", close: 1.09, pos20: 14.0, signal: "低位磨底", low20: 1.085, high20: 1.128, holding: false, reason: "20日区间位置 14%，尚未企稳；参考低吸 1.085 / 高抛 1.128" },
+      { code: "512800", name: "银行ETF", close: 0.80, pos20: 20.0, signal: "低位磨底", low20: 0.79, high20: 0.84, holding: false, reason: "20日区间位置 20%，尚未企稳；参考低吸 0.790 / 高抛 0.840" }
+    ],
     etfs: [
-      { code: "518880", name: "黄金ETF",       close: 9.103, pct: 1.04,  ret5: 8.26,  ret20: 8.68,  vol_ratio: 2.76, dd20: 0.0,   tag: "放量突破" },
-      { code: "588170", name: "科创半导体ETF", close: 1.04,  pct: 2.16,  ret5: 20.23, ret20: -14.4, vol_ratio: 0.99, dd20: -7.3,  tag: "超跌反弹", holding: true },
-      { code: "562590", name: "半导体设备ETF", close: 1.07,  pct: 2.39,  ret5: 18.36, ret20: -12.2, vol_ratio: 0.74, dd20: -5.6,  tag: "超跌反弹" },
-      { code: "512480", name: "半导体ETF",     close: 1.088, pct: 1.68,  ret5: 12.28, ret20: -16.8, vol_ratio: 0.80, dd20: -11.7, tag: "超跌反弹" },
-      { code: "512400", name: "有色金属ETF",   close: 1.94,  pct: 0.94,  ret5: 7.25,  ret20: 9.36,  vol_ratio: 1.80, dd20: -3.9,  tag: "趋势向上" },
-      { code: "159995", name: "芯片ETF",       close: 1.19,  pct: 1.36,  ret5: 9.87,  ret20: -18.8, vol_ratio: 0.69, dd20: -13.9, tag: "超跌反弹" },
-      { code: "512010", name: "医药ETF",       close: 0.401, pct: -0.50, ret5: 4.69,  ret20: 9.26,  vol_ratio: 1.29, dd20: -1.0,  tag: "趋势向上" },
-      { code: "512170", name: "医疗ETF",       close: 0.35,  pct: -0.29, ret5: 4.79,  ret20: 9.72,  vol_ratio: 1.21, dd20: -0.9,  tag: "趋势向上" },
-      { code: "588000", name: "科创50ETF",     close: 1.81,  pct: 1.12,  ret5: 7.04,  ret20: -14.1, vol_ratio: 0.66, dd20: -10.0, tag: "超跌反弹" },
-      { code: "515790", name: "光伏ETF",       close: 0.87,  pct: 0.46,  ret5: 3.57,  ret20: 2.11,  vol_ratio: 0.92, dd20: 0.0,   tag: "趋势向上" },
-      { code: "562500", name: "机器人ETF",     close: 1.02,  pct: 0.59,  ret5: 3.73,  ret20: -2.19, vol_ratio: 0.92, dd20: -1.8,  tag: "企稳回升" },
-      { code: "515050", name: "通信ETF",       close: 1.02,  pct: 0.79,  ret5: 3.95,  ret20: -17.0, vol_ratio: 0.70, dd20: -14.5, tag: "企稳回升" },
-      { code: "512660", name: "军工ETF",       close: 1.15,  pct: 0.17,  ret5: 3.04,  ret20: -0.69, vol_ratio: 0.80, dd20: -1.9,  tag: "企稳回升" },
-      { code: "159928", name: "消费ETF",       close: 0.681, pct: -0.29, ret5: 0.0,   ret20: 7.45,  vol_ratio: 1.13, dd20: -2.9,  tag: "趋势向上" },
-      { code: "512690", name: "酒ETF",         close: 0.44,  pct: -0.45, ret5: -0.45, ret20: 10.86, vol_ratio: 1.01, dd20: -3.1,  tag: "弱势整理" },
-      { code: "159819", name: "人工智能ETF",   close: 1.82,  pct: 0.22,  ret5: -0.11, ret20: -12.7, vol_ratio: 0.74, dd20: -10.3, tag: "弱势整理" },
-      { code: "513130", name: "恒生科技ETF",   close: 0.60,  pct: -0.33, ret5: -1.15, ret20: 2.22,  vol_ratio: 0.66, dd20: -2.4,  tag: "弱势整理" },
-      { code: "512000", name: "券商ETF",       close: 0.52,  pct: -0.19, ret5: -1.14, ret20: -1.33, vol_ratio: 0.82, dd20: -3.5,  tag: "弱势整理" },
-      { code: "512880", name: "证券ETF",       close: 1.09,  pct: -0.18, ret5: -1.18, ret20: -1.18, vol_ratio: 0.75, dd20: -3.4,  tag: "弱势整理" },
-      { code: "512800", name: "银行ETF",       close: 0.80,  pct: -0.37, ret5: -1.72, ret20: 2.05,  vol_ratio: 1.07, dd20: -5.1,  tag: "弱势整理" },
-      { code: "513050", name: "中概互联网ETF", close: 1.16,  pct: -0.43, ret5: -1.95, ret20: 6.45,  vol_ratio: 0.70, dd20: -2.9,  tag: "弱势整理" }
+      { code: "518880", name: "黄金ETF",       close: 9.103, pct: 1.04,  ret5: 8.26,  ret20: 8.68,  vol_ratio: 2.76, dd20: 0.0,   pos20: 100.0, signal: "高抛窗口", tag: "放量突破" },
+      { code: "588170", name: "科创半导体ETF", close: 1.04,  pct: 2.16,  ret5: 20.23, ret20: -14.4, vol_ratio: 0.99, dd20: -7.3,  pos20: 62.0,  signal: "中段观望", tag: "超跌反弹", holding: true },
+      { code: "562590", name: "半导体设备ETF", close: 1.07,  pct: 2.39,  ret5: 18.36, ret20: -12.2, vol_ratio: 0.74, dd20: -5.6,  pos20: 66.0,  signal: "中段观望", tag: "超跌反弹" },
+      { code: "512480", name: "半导体ETF",     close: 1.088, pct: 1.68,  ret5: 3.61,  ret20: -16.8, vol_ratio: 0.80, dd20: -11.7, pos20: 86.1,  signal: "高抛窗口", tag: "趋势向上" },
+      { code: "512000", name: "券商ETF",       close: 0.52,  pct: -0.19, ret5: -1.14, ret20: -1.33, vol_ratio: 0.82, dd20: -3.5,  pos20: 5.0,   signal: "低位磨底", tag: "弱势整理" }
     ]
   };
 
@@ -282,6 +322,16 @@
     if (t === "放量突破" || t === "超跌反弹") return "tag hot";
     if (t === "弱势整理") return "tag weak";
     return "tag";
+  }
+  function sigClass(s) {
+    if (s === "低吸窗口") return "sig buy";
+    if (s === "高抛窗口") return "sig sell";
+    return "sig";
+  }
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"]/g, function (ch) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch];
+    });
   }
 
   function render(data) {
@@ -298,6 +348,26 @@
       var wt = document.querySelector('[data-f="winner_tag"]');
       wt.textContent = w.tag || "—";
       wt.className = tagClass(w.tag);
+    }
+
+    // 低吸潜力条
+    var pkBox = document.querySelector("[data-picks]");
+    var pkRows = document.querySelector("[data-pick-rows]");
+    var picks = main.picks || [];
+    if (picks.length) {
+      pkBox.hidden = false;
+      pkRows.innerHTML = "";
+      picks.forEach(function (p) {
+        var d = document.createElement("div");
+        d.className = "pick" + (p.holding ? " holding" : "");
+        d.innerHTML = '<span class="pn">' + esc(p.name) + "</span>" +
+          '<span class="' + sigClass(p.signal) + '">' + esc(p.signal) + "</span>" +
+          '<span class="pr">' + esc(p.reason || "") + "</span>";
+        pkRows.appendChild(d);
+      });
+    } else {
+      pkBox.hidden = true;
+      pkRows.innerHTML = "";
     }
 
     // 市场状态条
@@ -340,7 +410,9 @@
         '<span class="bar-val ' + cls(e.ret5) + '">' + fmt(e.ret5) + "%</span></span>" +
         '<span class="num col-wide ' + cls(e.ret20) + '">' + fmt(e.ret20) + "%</span>" +
         '<span class="num col-wide">' + (e.vol_ratio ? Number(e.vol_ratio).toFixed(1) + "x" : "—") + "</span>" +
-        '<span class="tagcell"><span class="' + tagClass(e.tag) + '">' + (e.tag || "—") + "</span></span>";
+        '<span class="num col-wide">' + (e.pos20 === null || e.pos20 === undefined ? "—" : Number(e.pos20).toFixed(0) + "%") + "</span>" +
+        '<span class="tagcell"><span class="' + tagClass(e.tag) + '">' + (e.tag || "—") + "</span>" +
+        '<span class="' + sigClass(e.signal) + '">' + (e.signal || "—") + "</span></span>";
       if (i < topN) rowsEl.appendChild(row);
       else if (expanded) rows2El.appendChild(row);
     });
