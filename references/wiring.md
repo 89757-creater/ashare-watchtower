@@ -21,7 +21,7 @@ condition 触发器要求 `conditions/should_fire.py` 暴露 `def should_fire(ct
 required: 无强制；properties（全部 number/string）：price, change_pct, date, time, shares, cost, market_value, float_pnl, float_pnl_pct, day_high, day_low, stop_loss, take_profit, alert（none/near_stop/near_target/stop_loss/take_profit）, note, limit_up, limit_down, limit_state（none/hit_up/hit_down）, limit_time。
 
 ### 动量榜 Widget
-required: ["as_of", "etfs"]。as_of string；market: [{code,name,close,pct,ret5,ret20}]；etfs: [{code,name,close,pct,ret5,ret20,vol_ratio,dd20,tag,holding}]，tag ∈ 放量突破/趋势向上/超跌反弹/企稳回升/弱势整理；note string。
+required: ["as_of", "etfs"]。as_of string；market: [{code,name,close,pct,ret5,ret20}]；etfs: [{code,name,close,pct,ret5,ret20,vol_ratio,dd20,low20,high20,pos20,signal,tag,holding}]，tag ∈ 放量突破/趋势向上/超跌反弹/企稳回升/弱势整理；signal ∈ 低吸窗口/低位磨底/高抛窗口/高位回落/中段观望（pos20=现价在 20 日收盘区间位置，≤30 低位、≥75 高位）；picks: [{code,name,close,pos20,signal,low20,high20,holding,reason}] 低吸潜力榜（≤3 只，参考低吸价=20 日最低收盘、高抛价=20 日最高收盘）；note string。
 
 ### 舆情雷达 Widget
 required: ["as_of", "events"]。sentiment ∈ 偏多/偏空/中性；overview string；events: [{title,direction,impact,summary,source,time,heat(1-5),sectors[],etfs[{code,name,direction,holding}],holding_relevant,logic,watch}]，direction ∈ 利多/利空/中性，impact ∈ 高/中/低。
