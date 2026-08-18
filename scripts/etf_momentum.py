@@ -1,5 +1,15 @@
 # -*- coding: utf-8 -*-
-"""ETF 动量榜每日刷新：抓取腾讯行情日 K，计算动量/量能/节奏标签，输出 artifact。"""
+"""ETF 动量榜每日刷新：抓取腾讯行情日 K，计算动量/量能/节奏标签 + 低买高卖波段信号，输出 artifact。
+
+波段信号口径（透明规则，非预测承诺）：
+- pos20：现价在最近 20 日收盘价区间中的位置（0=区间最低，100=区间最高）
+- 低吸窗口：pos20 <= 30 且近5日已止跌回升（ret5 > 0）
+- 低位磨底：pos20 <= 30 但 ret5 <= 0（低位未企稳，不急接）
+- 高抛窗口：pos20 >= 75 且 ret5 > 0（区间高位仍上冲，分批兑现）
+- 高位回落：pos20 >= 75 且 ret5 <= 0
+- 其余：中段观望
+- 参考低吸价 = 20 日最低收盘，参考高抛价 = 20 日最高收盘
+"""
 import json
 import sys
 import time
@@ -35,6 +45,11 @@ INDICES = [
     ("sz399006", "创业板指"),
 ]
 
+# 波段信号阈值（可按偏好调整）
+LOW_POS = 30    # 区间位置 <= 30% 视为低位区
+HIGH_POS = 75   # 区间位置 >= 75% 视为高位区
+# ==============================================================================
+
 UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
 
@@ -69,9 +84,14 @@ def metrics(k):
     v5 = sum(vols[-5:]) / 5
     v20 = sum(vols[-25:-5]) / max(1, min(20, n - 5)) if n > 5 else 0
     vol_ratio = (v5 / v20) if v20 else None
-    dd20 = (last / max(closes[-20:]) - 1) * 100
+    win = closes[-20:]
+    low20, high20 = min(win), max(win)
+    dd20 = (last / high20 - 1) * 100
+    span = high20 - low20
+    pos20 = (last - low20) / span * 100 if span > 0 else 50.0
     return dict(close=last, pct=pct, ret5=ret5, ret20=ret20,
-                vol_ratio=vol_ratio, dd20=dd20, date=k[-1][0])
+                vol_ratio=vol_ratio, dd20=dd20, date=k[-1][0],
+                low20=low20, high20=high20, pos20=pos20)
 
 
 def make_tag(ret5, ret20, vol_ratio, dd20):
@@ -86,6 +106,17 @@ def make_tag(ret5, ret20, vol_ratio, dd20):
     if ret5 > 0:
         return "企稳回升"
     return "弱势整理"
+
+
+def make_signal(pos20, ret5):
+    """低买高卖波段信号：区间位置 × 动量方向。"""
+    if pos20 is None or ret5 is None:
+        return "数据不足"
+    if pos20 <= LOW_POS:
+        return "低吸窗口" if ret5 > 0 else "低位磨底"
+    if pos20 >= HIGH_POS:
+        return "高抛窗口" if ret5 > 0 else "高位回落"
+    return "中段观望"
 
 
 def run(ctx):
@@ -107,6 +138,10 @@ def run(ctx):
                              ret20=round(m["ret20"], 2) if m["ret20"] is not None else None,
                              vol_ratio=round(m["vol_ratio"], 2) if m["vol_ratio"] else None,
                              dd20=round(m["dd20"], 2),
+                             low20=round(m["low20"], 4),
+                             high20=round(m["high20"], 4),
+                             pos20=round(m["pos20"], 1),
+                             signal=make_signal(m["pos20"], m["ret5"]),
                              tag=make_tag(m["ret5"], m["ret20"], m["vol_ratio"], m["dd20"])))
         except Exception:
             failed.append(code)
@@ -125,6 +160,23 @@ def run(ctx):
         time.sleep(0.15)
 
     etfs.sort(key=lambda e: (e["ret5"] if e["ret5"] is not None else -999), reverse=True)
+
+    # 低吸潜力榜：区间位置最低的「低吸窗口」标的优先，其次「低位磨底」
+    def pick_rank(e):
+        order = {"低吸窗口": 0, "低位磨底": 1}
+        return (order.get(e["signal"], 9), e["pos20"] if e["pos20"] is not None else 999)
+
+    picks = []
+    for e in sorted([x for x in etfs if x["signal"] in ("低吸窗口", "低位磨底")], key=pick_rank)[:3]:
+        picks.append({
+            "code": e["code"], "name": e["name"], "close": e["close"],
+            "pos20": e["pos20"], "signal": e["signal"],
+            "low20": e["low20"], "high20": e["high20"], "holding": e["holding"],
+            "reason": "20日区间位置 %.0f%%%s；参考低吸 %.3f / 高抛 %.3f" % (
+                e["pos20"], "，近5日止跌回升" if e["signal"] == "低吸窗口" else "，尚未企稳",
+                e["low20"], e["high20"]),
+        })
+
     note = ""
     if failed:
         note = "以下标的本次取数失败已跳过：" + "、".join(failed)
@@ -133,6 +185,7 @@ def run(ctx):
         "as_of": (last_date + " 收盘") if last_date else "数据暂缺",
         "market": market,
         "etfs": etfs,
+        "picks": picks,
         "note": note,
     }
     return {"artifact": artifact}
